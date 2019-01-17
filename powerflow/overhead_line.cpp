@@ -102,30 +102,86 @@ int overhead_line::init(OBJECT *parent)
 	recalc();
 
 	//Values are populated now - populate link ratings parameter
-	for (index=0; index<5; index++)
-	{
-		if (index==0)
+	if (config->phaseA_conductor != NULL || config->phaseB_conductor != NULL || config->phaseC_conductor != NULL) {
+		for (index=0; index<3; index++)
 		{
-			temp_obj = configuration;
-		}
-		else if (index==1)
-		{
-			temp_obj = config->phaseA_conductor;
-		}
-		else if (index==2)
-		{
-			temp_obj = config->phaseB_conductor;
-		}
-		else if (index==3)
-		{
-			temp_obj = config->phaseC_conductor;
-		}
-		else	//Must be 3
-		{
-			temp_obj = config->phaseN_conductor;
-		}
+			if (index==0)
+			{
+				temp_obj = config->phaseA_conductor;
+			}
+			else if (index==1)
+			{
+				temp_obj = config->phaseB_conductor;
+			}
+			else //Must be 2
+			{
+				temp_obj = config->phaseC_conductor;
+			}
 
-		//See if Phase exists
+			//See if Phase exists
+			if (temp_obj != NULL)
+			{
+				//Get continuous - summer
+				temp_rating_value = get_double(temp_obj,"rating.summer.continuous");
+
+				//Check if NULL
+				if (temp_rating_value != NULL)
+				{
+					//Update - if necessary
+					if (temp_rating_continuous > *temp_rating_value)
+					{
+						temp_rating_continuous = *temp_rating_value;
+					}
+				}
+
+				//Get continuous - winter
+				temp_rating_value = get_double(temp_obj,"rating.winter.continuous");
+
+				//Check if NULL
+				if (temp_rating_value != NULL)
+				{
+					//Update - if necessary
+					if (temp_rating_continuous > *temp_rating_value)
+					{
+						temp_rating_continuous = *temp_rating_value;
+					}
+				}
+
+				//Now get emergency - summer
+				temp_rating_value = get_double(temp_obj,"rating.summer.emergency");
+
+				//Check if NULL
+				if (temp_rating_value != NULL)
+				{
+					//Update - if necessary
+					if (temp_rating_emergency > *temp_rating_value)
+					{
+						temp_rating_emergency = *temp_rating_value;
+					}
+				}
+
+				//Now get emergency - winter
+				temp_rating_value = get_double(temp_obj,"rating.winter.emergency");
+
+				//Check if NULL
+				if (temp_rating_value != NULL)
+				{
+					//Update - if necessary
+					if (temp_rating_emergency > *temp_rating_value)
+					{
+						temp_rating_emergency = *temp_rating_value;
+					}
+				}
+
+				//Populate link array
+				link_rating[0][index] = temp_rating_continuous;
+				link_rating[1][index] = temp_rating_emergency;
+			}//End Phase valid
+		}//End FOR
+	}
+	else {
+		temp_obj = configuration;
+		//See if configuration exists
 		if (temp_obj != NULL)
 		{
 			//Get continuous - summer
@@ -181,14 +237,10 @@ int overhead_line::init(OBJECT *parent)
 			}
 
 			//Populate link array
-			if (index < 3)
-			{
-				link_rating[0][index] = temp_rating_continuous;
-				link_rating[1][index] = temp_rating_emergency;
-			}
-		}//End Phase valid
-	}//End FOR
-
+			link_rating[0][0] = link_rating[0][1] = link_rating[0][2] = temp_rating_continuous;
+			link_rating[1][0] = link_rating[1][1] = link_rating[1][2] = temp_rating_emergency;
+		}
+	}
 	return 1;
 }
 
@@ -832,7 +884,7 @@ void overhead_line::test_phases(line_configuration *config, const char ph)
 	{
 		if (config->impedance11 == 0.0)
 		{
-			condCheck = (config->phaseA_conductor && !gl_object_isa(config->phaseA_conductor, "overhead_line_conductor"));
+			condCheck = (config->phaseA_conductor && !gl_object_isa(config->phaseA_conductor, "overhead_line_conductor","powerflow"));
 			condNotPres = ((!config->phaseA_conductor) && has_phase(PHASE_A));
 		}
 		else
@@ -845,7 +897,7 @@ void overhead_line::test_phases(line_configuration *config, const char ph)
 	{
 		if (config->impedance22 == 0.0)
 		{
-			condCheck = (config->phaseB_conductor && !gl_object_isa(config->phaseB_conductor, "overhead_line_conductor"));
+			condCheck = (config->phaseB_conductor && !gl_object_isa(config->phaseB_conductor, "overhead_line_conductor","powerflow"));
 			condNotPres = ((!config->phaseB_conductor) && has_phase(PHASE_B));
 		}
 		else
@@ -858,7 +910,7 @@ void overhead_line::test_phases(line_configuration *config, const char ph)
 	{
 		if (config->impedance33 == 0.0)
 		{
-			condCheck = (config->phaseC_conductor && !gl_object_isa(config->phaseC_conductor, "overhead_line_conductor"));
+			condCheck = (config->phaseC_conductor && !gl_object_isa(config->phaseC_conductor, "overhead_line_conductor","powerflow"));
 			condNotPres = ((!config->phaseC_conductor) && has_phase(PHASE_C));
 		}
 		else
@@ -871,7 +923,7 @@ void overhead_line::test_phases(line_configuration *config, const char ph)
 	{
 		if (config->impedance11 == 0.0 && config->impedance22 == 0.0 && config->impedance33 == 0.0)
 		{
-			condCheck = (config->phaseN_conductor && !gl_object_isa(config->phaseN_conductor, "overhead_line_conductor"));
+			condCheck = (config->phaseN_conductor && !gl_object_isa(config->phaseN_conductor, "overhead_line_conductor","powerflow"));
 			condNotPres = ((!config->phaseN_conductor) && has_phase(PHASE_N));
 		}
 		else
@@ -1005,7 +1057,7 @@ EXPORT int recalc_overhead_line(OBJECT *obj)
 	OBJECTDATA(obj,overhead_line)->recalc();
 	return 1;
 }
-EXPORT int create_fault_ohline(OBJECT *thisobj, OBJECT **protect_obj, char *fault_type, int *implemented_fault, TIMESTAMP *repair_time, void *Extra_Data)
+EXPORT int create_fault_ohline(OBJECT *thisobj, OBJECT **protect_obj, char *fault_type, int *implemented_fault, TIMESTAMP *repair_time)
 {
 	int retval;
 
@@ -1013,11 +1065,11 @@ EXPORT int create_fault_ohline(OBJECT *thisobj, OBJECT **protect_obj, char *faul
 	overhead_line *thisline = OBJECTDATA(thisobj,overhead_line);
 
 	//Try to fault up
-	retval = thisline->link_fault_on(protect_obj, fault_type, implemented_fault, repair_time, Extra_Data);
+	retval = thisline->link_fault_on(protect_obj, fault_type, implemented_fault, repair_time);
 
 	return retval;
 }
-EXPORT int fix_fault_ohline(OBJECT *thisobj, int *implemented_fault, char *imp_fault_name, void* Extra_Data)
+EXPORT int fix_fault_ohline(OBJECT *thisobj, int *implemented_fault, char *imp_fault_name)
 {
 	int retval;
 
@@ -1025,7 +1077,7 @@ EXPORT int fix_fault_ohline(OBJECT *thisobj, int *implemented_fault, char *imp_f
 	overhead_line *thisline = OBJECTDATA(thisobj,overhead_line);
 
 	//Clear the fault
-	retval = thisline->link_fault_off(implemented_fault, imp_fault_name, Extra_Data);
+	retval = thisline->link_fault_off(implemented_fault, imp_fault_name);
 	
 	//Clear the fault type
 	*implemented_fault = -1;
